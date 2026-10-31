@@ -59,12 +59,42 @@ jobs:
       - name: Run automated tests
         run: python manage.py test
 
+  
+  
   deploy:
     name: Deploy
     needs: test
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
-      - name: Deployment configuration pending
+      - name: Trigger Render deployment
+        env:
+          RENDER_DEPLOY_HOOK: ${{ secrets.RENDER_DEPLOY_HOOK }}
         run: |
-          echo "Deployment configuration will be added next."
+          if [ -z "$RENDER_DEPLOY_HOOK" ]; then
+            echo "Render deploy hook is missing"
+            exit 1
+          fi
+          curl --fail --show-error --silent \
+            --retry 3 \
+            --request POST \
+            "$RENDER_DEPLOY_HOOK"
+
+      - name: Verify live Student API
+        run: |
+          for i in $(seq 1 40); do
+            if curl --fail --silent --show-error \
+              --max-time 15 \
+              https://csc325-django-cicd.onrender.com/api/students/ \
+              -o /dev/null; then
+              echo "Student API is responding successfully."
+              exit 0
+            fi
+            echo "Waiting for Student API..."
+            sleep 15
+          done
+
+          echo "Student API did not become available."
+          exit 1
+
+
